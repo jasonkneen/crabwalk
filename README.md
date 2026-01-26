@@ -45,7 +45,23 @@ CLAWDBOT_API_TOKEN=your-token npm run dev
 
 Open `http://localhost:3000/monitor`
 
-Requires clawdbot gateway running on the same machine. Token is in `~/.clawdbot/clawdbot.json`
+## Configuration
+
+Requires clawdbot gateway running on the same machine.
+
+### Gateway Token
+
+Find your token in the clawdbot config file:
+
+```bash
+cat ~/.clawdbot/clawdbot.json | grep api_token
+```
+
+Or copy it directly:
+
+```bash
+export CLAWDBOT_API_TOKEN=$(cat ~/.clawdbot/clawdbot.json | grep -o '"api_token": *"[^"]*"' | cut -d'"' -f4)
+```
 
 ## Stack
 
