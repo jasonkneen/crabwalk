@@ -82,7 +82,7 @@ export function SessionList({
 
       {/* Header */}
       <div className="relative p-3 bg-shell-950/50">
-        <div className="flex items-center justify-between mb-3">
+        <div className={`flex items-center justify-between ${collapsed ? "" : "mb-3"}`}>
           {!collapsed && (
             <h2 className="font-mono uppercase text-sm text-crab-400 glow-red tracking-wider ml-1">
               Sessions
@@ -90,7 +90,7 @@ export function SessionList({
           )}
           <button
             onClick={onToggleCollapse}
-            className={`p-1.5 hover:bg-shell-800 rounded border border-transparent hover:border-shell-600 transition-all ${collapsed ? "mx-auto" : ""}`}
+            className={`p-1.5 hover:bg-shell-800 rounded transition-all ${collapsed ? "mx-auto" : ""}`}
             title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
             {collapsed ? (
@@ -216,7 +216,7 @@ export function SessionList({
       </div>
 
       {/* Footer */}
-      <div className="relative p-2.5 bg-shell-950/50">
+      <div className={`relative bg-shell-950/50 ${collapsed ? "py-4 px-2" : "p-2.5"}`}>
         <div
           className={`font-console text-xs text-shell-500 text-center flex items-center justify-center ${collapsed ? "flex-col gap-3" : "gap-4"}`}
         >
