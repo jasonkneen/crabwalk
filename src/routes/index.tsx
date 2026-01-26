@@ -1,7 +1,14 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { motion } from 'framer-motion'
 import { CrabIdleAnimation, CrabJumpAnimation, CrabAttackAnimation } from '~/components/ani'
+
+// All crab animation frames to preload
+const ALL_CRAB_FRAMES = [
+  ...Array.from({ length: 5 }, (_, i) => `/ani/crab-idle/Crab${i + 1}.png`),
+  ...Array.from({ length: 4 }, (_, i) => `/ani/crab-jump/CrabMoving${i + 1}.png`),
+  ...Array.from({ length: 4 }, (_, i) => `/ani/crab-attack/Crab_Attack${i + 1}.png`),
+]
 
 export const Route = createFileRoute('/')({
   component: Home,
@@ -35,6 +42,14 @@ type CrabState = 'idle' | 'jumping' | 'attacking'
 function Home() {
   const [crabState, setCrabState] = useState<CrabState>('idle')
   const [isHovering, setIsHovering] = useState(false)
+
+  // Preload all crab animation frames on mount
+  useEffect(() => {
+    for (const src of ALL_CRAB_FRAMES) {
+      const img = new Image()
+      img.src = src
+    }
+  }, [])
 
   const handleMouseEnter = useCallback(() => {
     setIsHovering(true)
