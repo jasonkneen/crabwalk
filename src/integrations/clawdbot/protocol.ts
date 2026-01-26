@@ -81,6 +81,7 @@ export interface AgentEvent {
   stream: string
   ts: number
   data: Record<string, unknown>
+  sessionKey?: string
 }
 
 // Sessions

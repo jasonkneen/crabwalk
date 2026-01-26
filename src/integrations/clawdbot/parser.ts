@@ -84,7 +84,16 @@ export function agentEventToAction(event: AgentEvent): MonitorAction {
   let toolName: string | undefined
   let toolArgs: unknown | undefined
 
-  if (data.type === 'tool_use') {
+  // Handle lifecycle events
+  if (event.stream === 'lifecycle') {
+    if (data.phase === 'start') {
+      type = 'delta'
+      content = 'Agent run started'
+    } else if (data.phase === 'end') {
+      type = 'final'
+      content = 'Agent run completed'
+    }
+  } else if (data.type === 'tool_use') {
     type = 'tool_call'
     toolName = String(data.name || 'unknown')
     toolArgs = data.input
@@ -100,7 +109,8 @@ export function agentEventToAction(event: AgentEvent): MonitorAction {
   return {
     id: `${event.runId}-${event.seq}`,
     runId: event.runId,
-    sessionKey: event.stream,
+    // Use sessionKey from event if available, fallback to stream
+    sessionKey: event.sessionKey || event.stream,
     seq: event.seq,
     type,
     eventType: 'agent' as const,
@@ -114,6 +124,11 @@ export function agentEventToAction(event: AgentEvent): MonitorAction {
 export function parseEventFrame(
   frame: EventFrame
 ): { session?: Partial<MonitorSession>; action?: MonitorAction } | null {
+  // Skip system events
+  if (frame.event === 'health' || frame.event === 'tick') {
+    return null
+  }
+
   if (frame.event === 'chat' && frame.payload) {
     const chatEvent = frame.payload as ChatEvent
     return {
@@ -128,9 +143,25 @@ export function parseEventFrame(
 
   if (frame.event === 'agent' && frame.payload) {
     const agentEvent = frame.payload as AgentEvent
-    return {
-      action: agentEventToAction(agentEvent),
+
+    // Skip assistant stream - it duplicates chat events
+    if (agentEvent.stream === 'assistant') {
+      return null
     }
+
+    // Only process lifecycle events (start/end markers)
+    if (agentEvent.stream === 'lifecycle') {
+      return {
+        action: agentEventToAction(agentEvent),
+        session: agentEvent.sessionKey ? {
+          key: agentEvent.sessionKey,
+          status: agentEvent.data?.phase === 'start' ? 'thinking' : 'active',
+          lastActivityAt: Date.now(),
+        } : undefined,
+      }
+    }
+
+    return null
   }
 
   return null
