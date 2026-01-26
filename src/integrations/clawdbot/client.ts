@@ -96,7 +96,7 @@ export class ClawdbotClient {
     })
   }
 
-  private handleChallenge(challenge: ChallengePayload) {
+  private handleChallenge(_challenge: ChallengePayload) {
     if (!this.token) {
       console.error('[clawdbot] No token for challenge response')
       return
@@ -107,18 +107,13 @@ export class ClawdbotClient {
       return
     }
 
-    // Per docs: wrap as request frame with method "connect"
+    // Local connection - try without device, just auth token
     const params = createConnectParams(this.token)
     const response: RequestFrame = {
       type: 'req',
       id: `connect-${Date.now()}`,
       method: 'connect',
-      params: {
-        ...params,
-        device: {
-          nonce: challenge.nonce,
-        },
-      },
+      params,
     }
 
     console.log('[clawdbot] Sending challenge response:', JSON.stringify(response).slice(0, 400))
