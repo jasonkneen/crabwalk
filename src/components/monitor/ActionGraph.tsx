@@ -133,8 +133,6 @@ export function ActionGraph({
             markerEnd: { type: MarkerType.ArrowClosed },
             style: { stroke: '#6b7280' },
           })
-        } else {
-          console.log('[graph] session not found for action:', first.sessionKey, 'available:', [...sessionNodeIds])
         }
 
         // Connect actions in sequence
