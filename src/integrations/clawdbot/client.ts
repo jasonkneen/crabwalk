@@ -1,5 +1,4 @@
 import WebSocket from 'ws'
-import { createHmac } from 'crypto'
 import {
   type GatewayFrame,
   type RequestFrame,
