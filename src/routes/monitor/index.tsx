@@ -101,14 +101,18 @@ function MonitorPage() {
       const result = await trpc.clawdbot.sessions.query(
         historicalMode ? { activeMinutes: 1440 } : { activeMinutes: 60 }
       )
-      if (result.sessions) {
+      console.log('[monitor] loadSessions result:', result.sessions?.length, result.error)
+      if (result.sessions && result.sessions.length > 0) {
+        console.log('[monitor] First session:', result.sessions[0])
         const tx = createTransaction({ mutationFn: async () => {} })
         tx.mutate(() => {
           for (const session of result.sessions) {
+            console.log('[monitor] upserting session:', session.key)
             upsertSession(session)
           }
         })
         await tx.commit()
+        console.log('[monitor] Transaction committed')
       }
     } catch (e) {
       console.error('Failed to load sessions:', e)
