@@ -172,12 +172,10 @@ export function hydrateFromServer(
     sessionsCollection.insert(session)
   }
 
-  // Insert all actions (rebuild runSessionMap as we go)
-  for (const action of actions) {
-    // Learn runId → sessionKey mapping
-    if (action.sessionKey && !action.sessionKey.includes('lifecycle')) {
-      runSessionMap.set(action.runId, action.sessionKey)
-    }
-    actionsCollection.insert(action)
+  // Replay actions through addAction to apply aggregation logic
+  // Sort by timestamp to ensure correct order
+  const sortedActions = [...actions].sort((a, b) => a.timestamp - b.timestamp)
+  for (const action of sortedActions) {
+    addAction(action)
   }
 }
