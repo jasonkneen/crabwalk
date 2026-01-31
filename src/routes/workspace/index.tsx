@@ -235,15 +235,74 @@ function WorkspacePage() {
   const handleRefresh = useCallback(async () => {
     if (!workspacePath || !pathValid) return
 
-    // Clear cache and reload
-    setPathCache(new Map())
-    await loadDirectory(workspacePath)
+    // Store current selection before clearing cache
+    const currentSelectedPath = selectedPath
 
-    // Reload selected file if any
-    if (selectedPath) {
-      await loadFile(selectedPath)
+    // Clear cache first, then reload
+    // Use a callback to ensure cache is cleared before loading
+    setPathCache(new Map())
+
+    // Small delay to ensure React has processed the state update
+    // before we try to load the directory
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    // Reload root directory - this will repopulate the file tree
+    // Force reload by bypassing cache check
+    setLoading(true)
+    try {
+      const result = await trpc.workspace.listDirectory.query({
+        workspaceRoot: workspacePath,
+        path: workspacePath,
+      })
+
+      if (result.error) {
+        throw new Error(result.error)
+      }
+
+      // Update cache with fresh data
+      setPathCache(new Map([[workspacePath, result.entries]]))
+    } catch (error) {
+      console.error('Failed to load directory:', error)
+    } finally {
+      setLoading(false)
     }
-  }, [workspacePath, pathValid, selectedPath])
+
+    // Reload selected file if any (with error handling for deleted files)
+    if (currentSelectedPath) {
+      try {
+        const result = await trpc.workspace.readFile.query({
+          workspaceRoot: workspacePath,
+          path: currentSelectedPath,
+        })
+
+        if (result.error) {
+          // File no longer exists - clear selection gracefully
+          setSelectedPath(null)
+          setSelectedFileContent('')
+          setSelectedFileName('')
+          setSelectedFileSize(undefined)
+          setSelectedFileModified(undefined)
+          setFileError(result.error)
+        } else {
+          setSelectedFileContent(result.content)
+          setSelectedFileName(result.name)
+          // Get file metadata from the parent directory entry if available
+          const parentDir = pathCache.get(getParentDirPath(currentSelectedPath) || workspacePath)
+          const fileEntry = parentDir?.find(e => e.path === currentSelectedPath)
+          setSelectedFileSize(fileEntry?.size)
+          setSelectedFileModified(fileEntry?.modifiedAt)
+        }
+      } catch (error) {
+        // File no longer exists - clear selection gracefully
+        setSelectedPath(null)
+        setSelectedFileContent('')
+        setSelectedFileName('')
+        setSelectedFileSize(undefined)
+        setSelectedFileModified(undefined)
+        setFileError(error instanceof Error ? error.message : 'Failed to read file')
+      }
+    }
+  }, [workspacePath, pathValid, selectedPath, loadFile])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {

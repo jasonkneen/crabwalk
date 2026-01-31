@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { ChevronRight, ChevronDown, Folder, FolderOpen, FileText } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { DirectoryEntry } from '~/lib/workspace-fs'
@@ -33,12 +33,18 @@ function FileTreeItem({ entry, selectedPath, onSelect, onLoadDirectory, level }:
   const [expanded, setExpanded] = useState(false)
   const [children, setChildren] = useState<DirectoryEntry[]>([])
   const [loading, setLoading] = useState(false)
+
+  // Reset children when entry path changes (e.g., on refresh)
+  useEffect(() => {
+    setChildren([])
+    setExpanded(false)
+  }, [entry.path])
   const isSelected = selectedPath === entry.path
   const isDirectory = entry.type === 'directory'
   const paddingLeft = level * 16 + 8
 
   const loadChildren = useCallback(async () => {
-    if (!isDirectory || children.length > 0 || !onLoadDirectory) return
+    if (!isDirectory || !onLoadDirectory) return
     setLoading(true)
     try {
       const entries = await onLoadDirectory(entry.path)
@@ -48,7 +54,7 @@ function FileTreeItem({ entry, selectedPath, onSelect, onLoadDirectory, level }:
     } finally {
       setLoading(false)
     }
-  }, [entry.path, isDirectory, children.length, onLoadDirectory])
+  }, [entry.path, isDirectory, onLoadDirectory])
 
   const handleToggle = useCallback(
     async (e: React.MouseEvent) => {
