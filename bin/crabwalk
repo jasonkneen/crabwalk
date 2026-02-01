@@ -35,6 +35,15 @@ get_network_ips() {
   fi
 }
 
+# Show QR code for URL
+show_qr() {
+  local url="$1"
+  if command -v qrencode &>/dev/null; then
+    echo ""
+    qrencode -t ANSIUTF8 -m 2 "$url" 2>/dev/null || true
+  fi
+}
+
 # Check if running
 is_running() {
   if [ -f "$PID_FILE" ]; then
@@ -52,6 +61,7 @@ show_banner() {
   local port="${1:-3000}"
   local host="${2:-0.0.0.0}"
   local version=$(get_version)
+  local network_url=""
 
   echo ""
   echo -e "🦀 ${GREEN}Crabwalk${NC} v${version}"
@@ -60,10 +70,20 @@ show_banner() {
   if [ "$host" = "0.0.0.0" ]; then
     echo -e "  ➜  Local:    ${CYAN}http://localhost:${port}/monitor${NC}"
     for ip in $(get_network_ips); do
+      # Use first IPv4 for QR code
+      if [ -z "$network_url" ] && [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        network_url="http://${ip}:${port}/monitor"
+      fi
       echo -e "  ➜  Network:  ${CYAN}http://${ip}:${port}/monitor${NC}"
     done
   else
-    echo -e "  ➜  Server:   ${CYAN}http://${host}:${port}/monitor${NC}"
+    network_url="http://${host}:${port}/monitor"
+    echo -e "  ➜  Server:   ${CYAN}${network_url}${NC}"
+  fi
+
+  # Show QR code for network access
+  if [ -n "$network_url" ]; then
+    show_qr "$network_url"
   fi
   echo ""
 }
