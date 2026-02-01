@@ -18,6 +18,14 @@ Watch your AI agents work across WhatsApp, Telegram, Discord, and Slack in a liv
 
 ## Installation
 
+### Via OpenClaw Agent
+
+Paste this link to your OpenClaw agent and ask it to install/update Crabwalk:
+
+```
+https://crabwalk.app/skill.md
+```
+
 ### Docker (recommended)
 
 ```bash
