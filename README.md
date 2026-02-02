@@ -36,16 +36,45 @@ cp ~/.crabwalk/bin/crabwalk ~/.local/bin/
 chmod +x ~/.local/bin/crabwalk
 ```
 
-Then run:
+## CLI Usage
+
+### Commands
 
 ```bash
-crabwalk                    # Start on 0.0.0.0:3000
+crabwalk                    # Start server (default: 0.0.0.0:3000)
 crabwalk start --daemon     # Run in background
-crabwalk start -p 8080      # Custom port
-crabwalk stop               # Stop daemon
+crabwalk stop               # Stop background server
 crabwalk status             # Check if running
-crabwalk update             # Update to latest
+crabwalk update             # Update to latest version
 ```
+
+### Options
+
+```
+-p, --port <port>      Server port (default: 3000)
+-H, --host <host>      Bind address (default: 0.0.0.0)
+-g, --gateway <url>    Gateway WebSocket URL (default: ws://127.0.0.1:18789)
+-t, --token <token>    Gateway auth token
+-d, --daemon           Run in background
+-v, --version          Show version
+```
+
+### Examples
+
+```bash
+crabwalk -p 8080                           # Custom port
+crabwalk -t mytoken123                     # Explicit token
+crabwalk -g ws://192.168.1.50:18789        # Remote gateway
+crabwalk start -d -p 8080                  # Daemon on port 8080
+```
+
+### Auto-detection
+
+The CLI automatically detects your gateway token from `~/.openclaw/openclaw.json` - no config needed if you're running OpenClaw locally.
+
+### QR Code
+
+On startup, Crabwalk displays a QR code you can scan to open the monitor on your phone. Requires `qrencode` installed (the installer adds it automatically).
 
 ### Docker (recommended)
 
