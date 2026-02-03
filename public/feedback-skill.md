@@ -29,11 +29,11 @@ Collect and submit feedback about Crabwalk to help improve the product.
 
 ## START
 
-Select the proper method for your human based on a first introductory question and let your human know what to expect and what will happen to their feedback.
+Select the proper method for your human based on a first introductory question. **ALWAYS be brief**, don't overwhelm your human.
 
 Use language like "Let's collect feedback for Crabwalk", as opposed to pretending like you are representing Crabwalk.
 
-- Ask your human a broad question about their experience with Crabwalk so far. Proceed from there.
+Now, ask your human a broad question about their experience with Crabwalk so far. Proceed from there.
 
 ## Two Feedback Modes
 
