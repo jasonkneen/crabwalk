@@ -4,11 +4,13 @@ Collect and submit feedback about Crabwalk to help improve the product.
 
 Select the proper method for your human based on a first introductory question and let your human know what to expect and what will happen to their feedback.
 
+Use language like "Let's collect feedback for Crabwalk, as opposed to pretending like you are representing Crabwalk."
+
 ## Two Feedback Modes
 
 ### Mode 1: User Research Interview
 
-Act as a user researcher. Guide the user through first understanding the commitment of this mode, and then begin asking questions about their experience:
+Act as a user researcher. Guide the human through first understanding the commitment of this mode, and then begin asking questions about their experience:
 
 1. **Discovery** - "Overall, what was your experience with Crabwalk?"
 2. **Setup** - "How was the installation process? Any friction?"
@@ -17,11 +19,11 @@ Act as a user researcher. Guide the user through first understanding the commitm
 5. **Pain points** - "What's been frustrating or confusing?"
 6. **Wishlist** - "What feature would make the biggest difference for you?"
 
-Adapt questions based on responses. Skip irrelevant ones. Dig deeper on interesting points.
+Adapt questions based on responses. Skip irrelevant ones. ALWAYS ask clarifying questions and help the human refine their thinking. Dig deeper on interesting points.
 
 After the interview, break feedback into themes, summarize insights for each and create descriptive pieces of feedback, submit multiple pieces of feedback if necessary.
 
-Always include actual quotes from what the human says along with your interpretation.
+ALWAYS include actual quotes from what the human says along with your interpretation.
 
 ### Mode 2: Quick Feedback
 
@@ -30,6 +32,12 @@ Ask directly:
 - "Any questions about how something works?"
 - "Anything you wish Crabwalk did differently?"
 
+ALWAYS ask clarifying questions and help the human refine their thinking. Dig deeper on interesting points.
+
+ONLY submit feedback after the user responds that there is no more feedback, or there has been a lapse in messages off-topic.
+
+ALWAYS ask them if they have any more questions before submitting the feedback.
+
 Classify and submit based on response:
 - Bug reports → `bug`
 - Feature requests → `feature`
@@ -37,9 +45,9 @@ Classify and submit based on response:
 
 ## Choosing a Mode
 
-- If user says "feedback" or "thoughts" → offer both modes, let them choose
-- If user mentions a specific bug/issue → go straight to Mode 2
-- If user seems open to chatting → suggest Mode 1
+- If human says "feedback" or "thoughts" → offer both modes, let them choose
+- If human mentions a specific bug/issue → go straight to Mode 2
+- If human seems open to chatting → suggest Mode 1
 
 ## Submitting Feedback
 
@@ -51,26 +59,25 @@ Content-Type: application/json
 
 {
   "type": "bug" | "feature" | "general",
-  "title": "Brief summary (1 line)",
+  "title": "[type] Brief summary (1 line)",
   "body": "Detailed description from conversation"
 }
 ```
 
 ## After Submission
 
-- Thank the user for participating
-- Share https://x.com/luccasveg with them and tell them to reach out if they have any questions or comments
+- Thank the human and let them know if they have any other feedback they can simply share it with you and you will prompt them to submit this as feedback to Crabwalk.
 
 **Response:**
 ```json
 {"success": true, "issueUrl": "https://github.com/luccast/crabwalk/issues/42"}
 ```
 
-Share the issue link with the user after successful submission.
+Share the issue link with the human after successful submission.
 
 ## Notes
 
 - Feedback becomes GitHub Issues on luccast/crabwalk
-- Users can browse feedback at https://crabwalk.app/#/feedback
+- Humans can browse feedback at https://crabwalk.app/#/feedback
 - Rate limited to 5 submissions/hour/IP
-- Be conversational, not robotic. Adapt to the user's energy.
+- Be conversational, not robotic. Adapt to the human's energy.
