@@ -9,17 +9,25 @@ import {
   type AgentEvent,
   type SessionInfo,
   type SessionsListParams,
+  type ConnectChallengePayload,
   createConnectParams,
 } from './protocol'
+import { buildSignedDevice } from './device'
 
 const DEFAULT_GATEWAY_URL = process.env.CLAWDBOT_URL || 'ws://127.0.0.1:18789'
 
-interface ChallengePayload {
-  nonce: string
-  ts: number
-}
-
 type EventCallback = (event: EventFrame) => void
+export type GatewayAuthState =
+  | 'unknown'
+  | 'authorized'
+  | 'unpaired'
+  | 'unauthorized'
+  | 'degraded'
+
+interface PairingInfo {
+  requestId?: string
+  message?: string
+}
 
 export class ClawdbotClient {
   private ws: WebSocket | null = null
@@ -32,6 +40,11 @@ export class ClawdbotClient {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private _connected = false
   private _connecting = false
+  private _authState: GatewayAuthState = 'unknown'
+  private _scopes: string[] = []
+  private _pairingInfo: PairingInfo | null = null
+  private _connectPromiseSettled = false
+  private readonly debugEnabled = process.env.CRABWALK_DEBUG_OPENCLAW === '1'
 
   constructor(
     private url: string = DEFAULT_GATEWAY_URL,
@@ -42,16 +55,32 @@ export class ClawdbotClient {
     return this._connected
   }
 
+  get authState() {
+    return this._authState
+  }
+
+  get scopes() {
+    return [...this._scopes]
+  }
+
+  get pairingInfo() {
+    return this._pairingInfo
+  }
+
   async connect(): Promise<HelloOk> {
     if (this._connecting || this._connected) {
       return { type: 'hello-ok', protocol: 3 } as HelloOk
     }
     this._connecting = true
+    this._connectPromiseSettled = false
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this._connecting = false
         this.ws?.close()
-        reject(new Error('Connection timeout - is openclaw gateway running?'))
+        if (!this._connectPromiseSettled) {
+          this._connectPromiseSettled = true
+          reject(new Error('Connection timeout - is openclaw gateway running?'))
+        }
       }, 10000)
 
       try {
@@ -63,7 +92,7 @@ export class ClawdbotClient {
       }
 
       this.ws.once('open', () => {
-        // WebSocket connected, waiting for challenge
+        this.debugLog('socket open, waiting for connect.challenge')
       })
 
       this.ws.on('message', (data) => {
@@ -73,7 +102,7 @@ export class ClawdbotClient {
 
           // Handle challenge-response auth
           if (msg.type === 'event' && msg.event === 'connect.challenge') {
-            this.handleChallenge(msg.payload as ChallengePayload)
+            this.handleChallenge(msg.payload as ConnectChallengePayload)
             return
           }
 
@@ -86,14 +115,33 @@ export class ClawdbotClient {
       this.ws.on('error', (err) => {
         clearTimeout(timeout)
         this._connecting = false
-        reject(err)
+        this.debugLog('socket error before connect', err)
+        if (!this._connectPromiseSettled) {
+          this._connectPromiseSettled = true
+          reject(err)
+        }
       })
 
-      this.ws.on('close', (code, _reason) => {
+      this.ws.on('close', (code, reason) => {
         clearTimeout(timeout)
         const wasConnected = this._connected
+        const wasConnecting = this._connecting
+        this.debugLog('socket close', {
+          code,
+          reason: reason?.toString?.() ?? '',
+          wasConnected,
+          wasConnecting,
+        })
         this._connected = false
         this._connecting = false
+        if (!wasConnected && wasConnecting && !this._connectPromiseSettled) {
+          this._connectPromiseSettled = true
+          reject(
+            new Error(
+              `Gateway closed before connect (code ${code}${reason ? `, reason: ${reason.toString()}` : ''})`
+            )
+          )
+        }
         // Only reconnect if we were previously connected and it wasn't a clean close
         if (wasConnected && code !== 1000) {
           this.scheduleReconnect()
@@ -102,12 +150,35 @@ export class ClawdbotClient {
     })
   }
 
-  private handleChallenge(_challenge: ChallengePayload) {
-    if (!this.token || this.ws?.readyState !== WebSocket.OPEN) {
+  private handleChallenge(challenge: ConnectChallengePayload) {
+    if (this.ws?.readyState !== WebSocket.OPEN) {
       return
     }
 
-    const params = createConnectParams(this.token)
+    let params = createConnectParams(this.token)
+    try {
+      const device = buildSignedDevice({
+        challenge,
+        token: this.token ?? null,
+        role: params.role,
+        scopes: params.scopes,
+        clientId: params.client.id,
+        clientMode: params.client.mode,
+      })
+      params = createConnectParams(this.token, device)
+    } catch (error) {
+      console.error('[openclaw] Failed to create signed device identity:', error)
+    }
+
+    this.debugLog('sending connect', {
+      hasToken: Boolean(params.auth?.token),
+      hasDevice: Boolean(params.device),
+      deviceId: params.device?.id,
+      clientMode: params.client.mode,
+      clientPlatform: params.client.platform,
+      scopes: params.scopes,
+    })
+
     const response: RequestFrame = {
       type: 'req',
       id: `connect-${Date.now()}`,
@@ -128,7 +199,10 @@ export class ClawdbotClient {
       switch (msg.type) {
         case 'hello-ok':
           if (connectTimeout) clearTimeout(connectTimeout)
+          this.updateAuthStateFromHello(msg)
           this._connected = true
+          this._connecting = false
+          this._connectPromiseSettled = true
           connectResolve?.(msg)
           break
 
@@ -136,8 +210,10 @@ export class ClawdbotClient {
           // Check if this is the hello-ok response to our connect request
           if (msg.ok && (msg.payload as HelloOk)?.type === 'hello-ok') {
             if (connectTimeout) clearTimeout(connectTimeout)
+            this.updateAuthStateFromHello(msg.payload as HelloOk)
             this._connected = true
             this._connecting = false
+            this._connectPromiseSettled = true
             connectResolve?.(msg.payload as HelloOk)
           } else {
             this.handleResponse(msg)
@@ -162,12 +238,25 @@ export class ClawdbotClient {
       if (res.ok) {
         pending.resolve(res.payload)
       } else {
-        pending.reject(new Error(res.error?.message || 'Request failed'))
+        const message = res.error?.message || 'Request failed'
+        this.updateAuthStateFromError(message)
+        pending.reject(new Error(message))
       }
     }
   }
 
   private handleEvent(event: EventFrame) {
+    if (event.event.includes('pair') || event.event.includes('device')) {
+      const payload = event.payload as { requestId?: string; message?: string } | undefined
+      if (payload?.requestId || payload?.message) {
+        this._authState = 'unpaired'
+        this._pairingInfo = {
+          requestId: payload.requestId,
+          message: payload.message,
+        }
+      }
+    }
+
     for (const listener of this.eventListeners) {
       try {
         listener(event)
@@ -235,6 +324,68 @@ export class ClawdbotClient {
       this.ws = null
     }
     this._connected = false
+    this._authState = 'unknown'
+    this._scopes = []
+    this._pairingInfo = null
+  }
+
+  private updateAuthStateFromHello(hello: HelloOk) {
+    const scopes = hello.auth?.scopes
+    this._scopes = scopes ? [...scopes] : []
+
+    if (!scopes) {
+      this._authState = 'authorized'
+      return
+    }
+
+    if (scopes.includes('operator.read')) {
+      this._authState = 'authorized'
+      this._pairingInfo = null
+      this.debugLog('authorized scopes', scopes)
+      return
+    }
+
+    this._authState = scopes.length === 0 ? 'unpaired' : 'degraded'
+    this.debugLog('non-authorized scopes', scopes)
+  }
+
+  private updateAuthStateFromError(message: string) {
+    const lowered = message.toLowerCase()
+    if (lowered.includes('missing scope') || lowered.includes('operator.read')) {
+      this._authState = 'unpaired'
+      const requestId = this.extractRequestId(message)
+      this._pairingInfo = {
+        requestId: requestId ?? this._pairingInfo?.requestId,
+        message,
+      }
+      return
+    }
+
+    if (lowered.includes('unauthorized') || lowered.includes('forbidden')) {
+      this._authState = 'unauthorized'
+      this._pairingInfo = { message }
+    }
+  }
+
+  private debugLog(message: string, payload?: unknown) {
+    if (!this.debugEnabled) return
+    if (payload !== undefined) {
+      console.log(`[openclaw][debug] ${message}`, payload)
+      return
+    }
+    console.log(`[openclaw][debug] ${message}`)
+  }
+
+  private extractRequestId(message: string): string | undefined {
+    const explicitMatch = message.match(/request(?:\s+id)?[:=\s]+([a-zA-Z0-9_-]+)/i)
+    if (explicitMatch?.[1]) {
+      return explicitMatch[1]
+    }
+
+    const uuidMatch = message.match(
+      /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/i
+    )
+    return uuidMatch?.[0]
   }
 }
 

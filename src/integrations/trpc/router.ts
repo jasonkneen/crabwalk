@@ -43,7 +43,12 @@ const openclawRouter = router({
   connect: publicProcedure.mutation(async () => {
     const client = getClawdbotClient()
     if (client.connected) {
-      return { status: 'already_connected' as const }
+      return {
+        status: 'already_connected' as const,
+        authState: client.authState,
+        scopes: client.scopes,
+        pairing: client.pairingInfo,
+      }
     }
     try {
       const hello = await client.connect()
@@ -52,11 +57,17 @@ const openclawRouter = router({
         protocol: hello.protocol,
         features: hello.features,
         presenceCount: hello.snapshot?.presence?.length ?? 0,
+        authState: client.authState,
+        scopes: client.scopes,
+        pairing: client.pairingInfo,
       }
     } catch (error) {
       return {
         status: 'error' as const,
         message: error instanceof Error ? error.message : 'Connection failed',
+        authState: client.authState,
+        scopes: client.scopes,
+        pairing: client.pairingInfo,
       }
     }
   }),
@@ -70,6 +81,16 @@ const openclawRouter = router({
   status: publicProcedure.query(() => {
     const client = getClawdbotClient()
     return { connected: client.connected }
+  }),
+
+  authStatus: publicProcedure.query(() => {
+    const client = getClawdbotClient()
+    return {
+      connected: client.connected,
+      authState: client.authState,
+      scopes: client.scopes,
+      pairing: client.pairingInfo,
+    }
   }),
 
   gatewayEndpoint: publicProcedure.query(() => {
@@ -134,7 +155,7 @@ const openclawRouter = router({
       const client = getClawdbotClient()
       const persistence = getPersistenceService()
       if (!client.connected) {
-        return { sessions: [], error: 'Not connected' }
+        return { sessions: [], error: 'Not connected', authState: client.authState }
       }
       try {
         const sessions = await client.listSessions(input)
@@ -143,11 +164,14 @@ const openclawRouter = router({
         for (const session of monitorSessions) {
           persistence.upsertSession(session)
         }
-        return { sessions: monitorSessions }
+        return { sessions: monitorSessions, authState: client.authState, scopes: client.scopes }
       } catch (error) {
         return {
           sessions: [],
           error: error instanceof Error ? error.message : 'Failed to list sessions',
+          authState: client.authState,
+          scopes: client.scopes,
+          pairing: client.pairingInfo,
         }
       }
     }),

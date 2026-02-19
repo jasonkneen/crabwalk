@@ -65,10 +65,19 @@ function MonitorPageWrapper() {
 const RETRY_DELAY = 3000
 const MAX_RETRIES = 10
 const DEFAULT_GATEWAY_ENDPOINT = 'ws://127.0.0.1:18789'
+type AuthState = 'unknown' | 'authorized' | 'unpaired' | 'unauthorized' | 'degraded'
+
+interface PairingState {
+  requestId?: string
+  message?: string
+}
 
 function MonitorPage() {
   const [connected, setConnected] = useState(false)
   const [connecting, setConnecting] = useState(false)
+  const [authState, setAuthState] = useState<AuthState>('unknown')
+  const [scopes, setScopes] = useState<string[]>([])
+  const [pairing, setPairing] = useState<PairingState | null>(null)
   const [retryCount, setRetryCount] = useState(0)
   const [historicalMode, setHistoricalMode] = useState(false)
   const [debugMode, setDebugMode] = useState(false)
@@ -117,6 +126,7 @@ function MonitorPage() {
   // Check connection status and persistence on mount
   useEffect(() => {
     checkStatus()
+    checkAuthStatus()
     checkPersistenceStatus()
     loadGatewayEndpoint()
   }, [])
@@ -151,18 +161,43 @@ function MonitorPage() {
     }
   }
 
+  const checkAuthStatus = useCallback(async () => {
+    try {
+      const status = await trpc.openclaw.authStatus.query()
+      setConnected(status.connected)
+      setAuthState(status.authState as AuthState)
+      setScopes(status.scopes ?? [])
+      setPairing(status.pairing ?? null)
+    } catch {
+      // ignore
+    }
+  }, [])
+
+  const canPollSessions = useMemo(() => {
+    if (!connected) return false
+    if (authState === 'unpaired' || authState === 'unauthorized' || authState === 'degraded') {
+      return false
+    }
+    return true
+  }, [connected, authState])
+
   const handleConnect = async (retry = 0) => {
     setConnecting(true)
     setRetryCount(retry)
     try {
       const result = await trpc.openclaw.connect.mutate()
+      setAuthState((result.authState as AuthState) ?? 'unknown')
+      setScopes(result.scopes ?? [])
+      setPairing(result.pairing ?? null)
       if (result.status === 'connected' || result.status === 'already_connected') {
         setConnected(true)
         setRetryCount(0)
         setConnecting(false)
-        // Hydrate from persistence if enabled
-        await hydrateFromPersistence()
-        await loadSessions()
+        if (result.authState === 'authorized' || result.authState === 'unknown') {
+          // Hydrate from persistence if enabled
+          await hydrateFromPersistence()
+          await loadSessions()
+        }
         return
       }
     } catch {
@@ -199,17 +234,24 @@ function MonitorPage() {
     try {
       await trpc.openclaw.disconnect.mutate()
       setConnected(false)
+      setAuthState('unknown')
+      setScopes([])
+      setPairing(null)
       clearCollections()
     } catch (e) {
       console.error('Disconnect error:', e)
     }
   }
 
-  const loadSessions = async () => {
+  const loadSessions = useCallback(async () => {
     try {
       const result = await trpc.openclaw.sessions.query(
         historicalMode ? { activeMinutes: 1440 } : { activeMinutes: 60 }
       )
+      setAuthState((prev) => (result.authState as AuthState) ?? prev)
+      setScopes((prev) => result.scopes ?? prev)
+      setPairing((prev) => result.pairing ?? prev)
+
       if (result.sessions) {
         for (const session of result.sessions) {
           upsertSession(session)
@@ -218,15 +260,18 @@ function MonitorPage() {
     } catch (e) {
       console.error('Failed to load sessions:', e)
     }
-  }
+  }, [historicalMode])
 
   const handleRefresh = useCallback(async () => {
-    await loadSessions()
-  }, [historicalMode])
+    await checkAuthStatus()
+    if (canPollSessions) {
+      await loadSessions()
+    }
+  }, [checkAuthStatus, canPollSessions, loadSessions])
 
   const handleHistoricalModeChange = (enabled: boolean) => {
     setHistoricalMode(enabled)
-    if (connected) {
+    if (canPollSessions) {
       loadSessions()
     }
   }
@@ -337,6 +382,15 @@ function MonitorPage() {
     return () => clearInterval(interval)
   }, [])
 
+  // Poll lightweight auth status while connected
+  useEffect(() => {
+    if (!connected) return
+    const interval = setInterval(() => {
+      checkAuthStatus()
+    }, 10000)
+    return () => clearInterval(interval)
+  }, [connected, checkAuthStatus])
+
   const handleToggleSidebar = useCallback(() => {
     setSidebarCollapsed((prev) => !prev)
   }, [])
@@ -350,16 +404,16 @@ function MonitorPage() {
 
   // Poll for sessions while connected
   useEffect(() => {
-    if (!connected) return
+    if (!canPollSessions) return
     const interval = setInterval(() => {
       loadSessions()
     }, 5000) // Poll every 5 seconds
     return () => clearInterval(interval)
-  }, [connected, historicalMode])
+  }, [canPollSessions, loadSessions])
 
   // Subscribe to real-time events
   useEffect(() => {
-    if (!connected) return
+    if (!canPollSessions) return
 
     const subscription = trpc.openclaw.events.subscribe(undefined, {
       onData: (data) => {
@@ -381,7 +435,11 @@ function MonitorPage() {
     return () => {
       subscription.unsubscribe()
     }
-  }, [connected])
+  }, [canPollSessions])
+
+  const pairingHint = pairing?.requestId
+    ? `openclaw devices approve ${pairing.requestId}`
+    : 'openclaw devices list && openclaw devices approve <requestId>'
 
   return (
     <div className="h-screen flex flex-col bg-shell-950 text-white overflow-hidden">
@@ -497,6 +555,17 @@ function MonitorPage() {
           />
         </div>
       </header>
+
+      {connected && !canPollSessions && (
+        <div className="px-4 py-2 border-y border-neon-peach/30 bg-neon-peach/10">
+          <div className="font-console text-xs text-neon-peach">
+            Authentication pending. Session polling is paused to avoid missing-scope errors.
+          </div>
+          <div className="font-console text-[11px] text-shell-300 mt-1">
+            {pairing?.message ?? `Approve this device in OpenClaw: ${pairingHint}`}
+          </div>
+        </div>
+      )}
 
       {/* Main content */}
       <div className="flex-1 flex overflow-hidden">

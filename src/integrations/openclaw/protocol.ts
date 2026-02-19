@@ -32,7 +32,7 @@ export interface ClientInfo {
   displayName: string
   version: string
   platform: string
-  mode: 'ui' | 'cli' | 'bot'
+  mode: 'ui' | 'cli' | 'bot' | 'operator' | 'node'
 }
 
 export interface ConnectParams {
@@ -40,6 +40,25 @@ export interface ConnectParams {
   maxProtocol: 3
   client: ClientInfo
   auth?: { token?: string }
+  device?: ConnectDevice
+}
+
+export interface ConnectChallengePayload {
+  nonce: string
+  ts: number
+}
+
+export interface ConnectDevice {
+  id: string
+  publicKey: string
+  signature: string
+  signedAt: number
+  nonce: string
+}
+
+export interface HelloAuth {
+  role?: string
+  scopes?: string[]
 }
 
 export interface HelloOk {
@@ -51,6 +70,7 @@ export interface HelloOk {
     stateVersion: { presence: number; health: number }
   }
   features: { methods: string[]; events: string[] }
+  auth?: HelloAuth
 }
 
 export interface PresenceEntry {
@@ -231,15 +251,32 @@ export function parseSessionKey(key: string): {
   return { agentId, platform, recipient, isGroup }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function createConnectParams(token?: string): any {
+export function createConnectParams(
+  token?: string,
+  device?: ConnectDevice
+): ConnectParams & {
+  role: string
+  scopes: string[]
+  caps: unknown[]
+  commands: unknown[]
+  permissions: Record<string, unknown>
+  locale: string
+  userAgent: string
+} {
+  const platformMap: Record<string, string> = {
+    win32: 'windows',
+    darwin: 'macos',
+    linux: 'linux',
+  }
+  const platform = platformMap[process.platform] ?? process.platform
+
   return {
     minProtocol: 3,
     maxProtocol: 3,
     client: {
       id: 'cli',
       version: '0.1.0',
-      platform: 'linux',
+      platform,
       mode: 'cli',
     },
     role: 'operator',
@@ -250,5 +287,6 @@ export function createConnectParams(token?: string): any {
     locale: 'en-US',
     userAgent: 'crabwalk-monitor/0.1.0',
     auth: token ? { token } : undefined,
+    device,
   }
 }
